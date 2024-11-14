@@ -1,4 +1,5 @@
 # app.py
+'''
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 import torch
@@ -381,3 +382,4 @@ Provide a clear and concise answer (2-3 sentences maximum) using only informatio
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+    '''

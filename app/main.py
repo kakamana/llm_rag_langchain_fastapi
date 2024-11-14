@@ -1,152 +1,185 @@
-from fastapi import FastAPI, HTTPException, Query
+# app/main.py
+from .create_app import create_app
+from fastapi import FastAPI, HTTPException, Query, status
 from typing import List, Dict, Optional
 import torch
-from models import QuestionResponse, Question
+from .models import Question, QuestionResponse  # Updated import
+from .services.rag_service import ModelService
 import logging
-# Configure logger
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI()
-
-from app.services.rag_service import ModelService  # Make sure to import the ModelService class
+# Create FastAPI app
+app = create_app()
 
 # Initialize model service
-model_service = ModelService()
+model_service = None
+
+# Error handler for common exceptions
+async def handle_exception(exc: Exception) -> JSONResponse:
+    logger.error(f"Error occurred: {str(exc)}")
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": str(exc)}
+    )
 
 @app.on_event("startup")
 async def startup_event():
-    # Load documents (update path as needed)
-    model_service.load_documents("Docs/All")
+    """Initialize the model service and load documents on startup"""
+    global model_service
+    if not app.debug:  # Skip initialization in test mode
+        try:
+            model_service = ModelService()
+            logger.info("Model service initialized successfully!")
+            docs_path = "./Docs/All"
+            model_service.load_documents(docs_path)
+            logger.info("Documents loaded successfully!")
+        except Exception as e:
+            logger.error(f"Startup error: {str(e)}")
+            raise
 
-@app.get("/test/documents", response_model=List[str])
-async def list_documents():
-    """List all available documents in the system"""
-    try:
-        # Get a sample of documents to extract unique sources
-        docs = model_service.vectorstore.similarity_search("test", k=100)
-        unique_sources = set()
-        
-        for doc in docs:
-            source = doc.metadata.get('source', 'Unknown Source')
-            if source != 'Unknown Source':
-                unique_sources.add(source)
-        
-        return sorted(list(unique_sources))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def check_model_service():
+    """Utility function to check if model service is initialized"""
+    if not model_service:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Model service not initialized"
+        )
+    return model_service
 
-@app.get("/test/search")
-async def test_search(
-    query: str = Query(..., description="Search query to test"),
-    k: Optional[int] = Query(4, description="Number of documents to retrieve")
-):
-    """Test the document retrieval system"""
-    try:
-        docs = model_service.vectorstore.similarity_search(query, k=k)
-        
-        results = []
-        for doc in docs:
-            results.append({
-                "content": doc.page_content,
-                "source": doc.metadata.get('source', 'Unknown'),
-                "page": doc.metadata.get('page_number', 'Unknown')
-            })
-        
-        return {
-            "query": query,
-            "num_results": len(results),
-            "results": results
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+# Health and System Check Endpoints
+@app.get("/health", tags=["System"])
+async def health_check():
+    """Basic health check endpoint"""
+    check_model_service()
+    return {
+        "status": "healthy",
+        "model_loaded": True,
+        "documents_loaded": bool(model_service.vectorstore)
+    }
 
-# Add a more detailed health check
-@app.get("/test/system")
+@app.get("/system", tags=["System"])
 async def system_check():
     """Detailed system status check"""
-    try:
-        return {
-            "status": "healthy",
-            "model_loaded": model_service is not None,
-            "embeddings_model": str(model_service.embeddings),
-            "vectorstore_initialized": model_service.vectorstore is not None,
-            "device": torch.device("mps" if torch.backends.mps.is_available() else "cpu"),
-            "torch_version": torch.__version__,
-            "cuda_available": torch.cuda.is_available(),
-            "mps_available": torch.backends.mps.is_available()
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    check_model_service()
+    return {
+        "status": "healthy",
+        "embeddings_model": str(model_service.embeddings),
+        "vectorstore_initialized": bool(model_service.vectorstore),
+        "device": str(torch.device("mps" if torch.backends.mps.is_available() else "cpu")),
+        "torch_version": torch.__version__,
+        "cuda_available": torch.cuda.is_available(),
+        "mps_available": torch.backends.mps.is_available()
+    }
 
-@app.get("/test/document-pages")
-async def test_document_pages():
-    """Test endpoint to verify document page numbers"""
-    try:
-        # Get a sample of documents
-        docs = model_service.vectorstore.similarity_search("test", k=20)
-        
-        # Group by document
-        doc_pages = {}
-        for doc in docs:
-            source = doc.metadata.get('source', 'Unknown')
-            page = doc.metadata.get('page', 'Unknown')
-            
-            if source not in doc_pages:
-                doc_pages[source] = set()
-            doc_pages[source].add(page)
-        
-        # Format results
-        results = []
-        for source, pages in doc_pages.items():
-            results.append({
+# Document Management Endpoints
+@app.get("/documents", tags=["Documents"], response_model=List[str])
+async def list_documents():
+    """List all available documents in the system"""
+    check_model_service()
+    docs = model_service.vectorstore.similarity_search("test", k=100)
+    unique_sources = {
+        doc.metadata.get('source', 'Unknown Source')
+        for doc in docs
+        if doc.metadata.get('source') != 'Unknown Source'
+    }
+    return sorted(list(unique_sources))
+
+@app.get("/documents/pages", tags=["Documents"])
+async def document_pages():
+    """Get document pages information"""
+    check_model_service()
+    docs = model_service.vectorstore.similarity_search("test", k=20)
+    
+    doc_pages = {}
+    for doc in docs:
+        source = doc.metadata.get('source', 'Unknown')
+        page = doc.metadata.get('page', 'Unknown')
+        doc_pages.setdefault(source, set()).add(page)
+    
+    return {
+        "status": "success",
+        "documents": [
+            {
                 "document": source,
                 "pages": sorted(list(pages)),
                 "total_pages": len(pages)
-            })
-        
+            }
+            for source, pages in doc_pages.items()
+        ]
+    }
+
+# Search and QA Endpoints
+@app.get("/search", tags=["Search"])
+async def search_documents(
+    query: str = Query(..., min_length=1, description="Search query to test"),
+    k: Optional[int] = Query(
+        default=4,
+        ge=1,  # greater than or equal to 1
+        le=100,  # less than or equal to 100
+        description="Number of documents to retrieve"
+    )
+):
+    """Test the document retrieval system"""
+    check_model_service()
+    try:
+        docs = model_service.vectorstore.similarity_search(query, k=k)
         return {
-            "status": "success",
-            "documents": results
+            "query": query,
+            "num_results": len(docs),
+            "results": [
+                {
+                    "content": doc.page_content,
+                    "source": doc.metadata.get('source', 'Unknown'),
+                    "page": doc.metadata.get('page', 'Unknown')
+                }
+                for doc in docs
+            ]
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
 
-@app.post("/ask", response_model=QuestionResponse)
+# Update the ask_question endpoint to use QuestionResponse
+@app.post("/ask", response_model=QuestionResponse, tags=["Question Answering"])
 async def ask_question(question: Question):
-    """
-    Ask a question about the loaded documents.
-    
-    The response will include:
-    - A concise answer based on the document content
-    - List of sources used (document names and page numbers)
-    """
+    """Ask a question and get an answer with sources"""
+    check_model_service()
     try:
-        if not model_service:
-            raise HTTPException(status_code=500, detail="Model service not initialized")
+        if not question.text.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Question text cannot be empty"
+            )
+        
         response = model_service.get_answer(question.text)
-        return response
+        return QuestionResponse(
+            text=response["text"],
+            sources=response["sources"]
+        )
     except Exception as e:
-        logger.error(f"Error processing question: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        return await handle_exception(e)
 
-# Add test endpoint to verify prompt and response
-@app.post("/test/prompt")
+@app.post("/prompt/test", tags=["Debug"])
 async def test_prompt(question: Question):
-    """Test endpoint to see the full prompt being sent to the model"""
-    try:
-        docs = model_service.vectorstore.similarity_search(question.text, k=4)
-        context_parts = []
-        for doc in docs:
-            source = doc.metadata.get('source', 'Unknown')
-            page = doc.metadata.get('page', 'Unknown')
-            content = doc.page_content.strip()
-            context_parts.append(f"Document: {source} (Page {page})\nContent: {content}")
-        
-        context = "\n\n".join(context_parts)
-        
-        prompt = f"""Please answer the following question based on the provided document excerpts.
+    """Test the prompt generation"""
+    check_model_service()
+    docs = model_service.vectorstore.similarity_search(question.text, k=4)
+    
+    context = "\n\n".join(
+        f"Document: {doc.metadata.get('source', 'Unknown')} "
+        f"(Page {doc.metadata.get('page', 'Unknown')})\n"
+        f"Content: {doc.page_content.strip()}"
+        for doc in docs
+    )
+    
+    prompt = f"""Please answer the following question based on the provided document excerpts.
 If the answer isn't found in the documents, say "I cannot find specific information about this in the provided documents."
 
 Question: {question.text}
@@ -155,16 +188,20 @@ Reference Documents:
 {context}
 
 Provide a clear and concise answer (2-3 sentences maximum) using only information from the documents:"""
-        
-        return {
-            "prompt": prompt,
-            "num_docs": len(docs),
-            "total_context_length": len(context)
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    
+    return {
+        "prompt": prompt,
+        "num_docs": len(docs),
+        "total_context_length": len(context)
+    }
 
-# For local testing
+# Development server configuration
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=True,
+        log_level="info"
+    )

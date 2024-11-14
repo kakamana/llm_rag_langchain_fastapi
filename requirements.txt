@@ -44,6 +44,7 @@ hyperframe==6.0.1
 idna==3.10
 importlib_metadata==8.5.0
 importlib_resources==6.4.5
+iniconfig==2.0.0
 Jinja2==3.1.4
 joblib==1.4.2
 jsonpatch==1.33
@@ -82,6 +83,7 @@ orjson==3.10.11
 overrides==7.7.0
 packaging==24.2
 pillow==11.0.0
+pluggy==1.5.0
 posthog==3.7.0
 propcache==0.2.0
 protobuf==5.28.3
@@ -95,6 +97,7 @@ Pygments==2.18.0
 pypdf==5.1.0
 PyPika==0.48.9
 pyproject_hooks==1.2.0
+pytest==8.3.3
 python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 PyYAML==6.0.2
