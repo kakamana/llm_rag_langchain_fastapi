@@ -36,7 +36,7 @@ llm_rag_langchain_fastapi/
 
 # Project specific
 #Docs/
-*.pdf
+#*.pdf
 chroma/
 chromadb/
 .chroma/
