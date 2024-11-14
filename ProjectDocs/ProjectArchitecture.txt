@@ -1,0 +1,14 @@
+LLM_RAG_LANGCHAIN_FASTAPI/
+├── app/
+│   ├── __init__.py
+│   ├── main.py
+│   ├── models.py
+│   └── services/
+│       └── rag_service.py
+├── tests/
+│   └── test_app.py
+├── .gitignore
+├── requirements.txt
+├── README.md
+└── Docs/
+    └── All/

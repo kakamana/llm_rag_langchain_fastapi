@@ -1,0 +1,10 @@
+# Test health endpoint
+curl http://localhost:8000/health
+
+# Test ask endpoint
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"text": "What are the working hours policy?"}'
+
+# Test documents endpoint (if implemented)
+curl http://localhost:8000/test/documents

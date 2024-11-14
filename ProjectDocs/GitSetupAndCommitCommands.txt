@@ -1,0 +1,41 @@
+# Initialize Git repository
+git init
+
+# Add .gitignore and create initial files
+touch .gitignore
+touch requirements.txt
+touch README.md
+
+# Generate requirements.txt
+pip freeze > requirements.txt
+
+# Add files to git
+git add .gitignore
+git add requirements.txt
+git add README.md
+git add app.py
+git add *.py
+
+# Initial commit
+git commit -m "Initial commit: RAG implementation with FastAPI"
+
+# If you want to push to GitHub
+# First create a new repository on GitHub, then:
+git remote add origin <your-github-repo-url>
+git branch -M main
+git push -u origin main
+
+
+# First, make sure you're in your project root directory
+# Add all new files and folders
+git add app/
+git add tests/
+
+# Check what's been staged
+git status
+
+# Create a meaningful commit
+git commit -m "feat: Add modular project structure with app and tests folders"
+
+# Push to remote repository
+git push origin main
