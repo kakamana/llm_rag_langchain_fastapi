@@ -39,3 +39,14 @@ git commit -m "feat: Add modular project structure with app and tests folders"
 
 # Push to remote repository
 git push origin main
+
+git diff --staged
+Other useful keys in diff view:
+
+Space or f: Forward one page
+b: Back one page
+j: Scroll down one line
+k: Scroll up one line
+/: Search forward
+n: Next search result
+q: Quit/Exit

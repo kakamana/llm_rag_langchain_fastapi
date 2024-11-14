@@ -1,0 +1,16 @@
+# tests/api.http
+@baseUrl = http://localhost:8000
+
+### Health Check
+GET {{baseUrl}}/health
+
+### Ask Question
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+    "text": "What are the working hours policy?"
+}
+
+### List Documents
+GET {{baseUrl}}/test/documents
